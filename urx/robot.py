@@ -6,13 +6,70 @@ http://support.universal-robots.com/URRobot/RemoteAccess
 
 
 import math3d as m3d
+import transforms3d as t3d
 import numpy as np
+import attr
 
 from urx.urrobot import URRobot
 
 __author__ = "Olivier Roulet-Dubonnet"
 __copyright__ = "Copyright 2011-2016, Sintef Raufoss Manufacturing"
 __license__ = "LGPLv3"
+
+
+@attr.s(frozen=True, kw_only=True)
+class Transform3D:
+    """Helper transform wrapper"""
+
+    pose: np.array = attr.ib(default=np.eye(4))
+
+    @property
+    def pose_vector(self) -> np.array:
+        """inverse of transform
+        """
+        T, _, _, _ = t3d.decompose44(self.pose_vector)
+        return T
+
+
+    @property
+    def pos(self) -> np.array:
+        """inverse of transform
+        """
+        T, _, _, _ = t3d.decompose44(self.pose_vector)
+        return T
+
+    @property
+    def ori(self) -> np.array:
+        """inverse of transform
+        """
+        _, R, _, _ = t3d.decompose44(self.pose_vector)
+        return R
+
+    @property
+    def inverse(self) -> "Transform3D":
+        """inverse of transform
+        """
+        H = np.eye(4)
+        T, R, _, _ = t3d.decompose44(self.pose_vector)
+        H[:3,:3] = T
+        H[:3,3] = R
+        return Transform3D(H)
+
+    def dist(self, trans: "Transform3D") -> float:
+        """distance to the other transform
+
+        Parameters
+        ----------
+        trans:
+            TODO: explanation
+
+        Returns
+        -------
+        float
+            TODO: explanation
+        """
+        rot_diff = t3d.mat2axangle(self.ori.T.dot(trans.ori))[0]
+        return np.sum((self.pos - trans.pos) ** 2)) + rot_diff ** 2
 
 
 class Robot(URRobot):
@@ -25,19 +82,19 @@ class Robot(URRobot):
 
     def __init__(self, host, use_rt=False):
         URRobot.__init__(self, host, use_rt)
-        self.csys = m3d.Transform()
+        self.csys = Transform3D()
 
     def _get_lin_dist(self, target):
         pose = URRobot.getl(self, wait=True)
-        target = m3d.Transform(target)
-        pose = m3d.Transform(pose)
+        target = Transform3D(target)
+        pose = Transform3D(pose)
         return pose.dist(target)
 
     def set_tcp(self, tcp):
         """
         set robot flange to tool tip transformation
         """
-        if isinstance(tcp, m3d.Transform):
+        if isinstance(tcp, Transform3D):
             tcp = tcp.pose_vector
         URRobot.set_tcp(self, tcp)
 
@@ -62,7 +119,7 @@ class Robot(URRobot):
         """
         move tool in tool coordinate, keeping orientation
         """
-        t = m3d.Transform()
+        t = Transform3D()
         if not isinstance(vect, m3d.Vector):
             vect = m3d.Vector(vect)
         t.pos += vect
@@ -80,7 +137,7 @@ class Robot(URRobot):
         """
         if not isinstance(vect, m3d.Vector):
             vect = m3d.Vector(vect)
-        trans = m3d.Transform(self.get_orientation(), m3d.Vector(vect))
+        trans = Transform3D(self.get_orientation(), m3d.Vector(vect))
         return self.set_pose(trans, acc, vel, wait=wait, threshold=threshold)
 
     def movec(self, pose_via, pose_to, acc=0.01, vel=0.01, wait=True, threshold=None):
@@ -88,8 +145,8 @@ class Robot(URRobot):
         Move Circular: Move to position (circular in tool-space)
         see UR documentation
         """
-        pose_via = self.csys * m3d.Transform(pose_via)
-        pose_to = self.csys * m3d.Transform(pose_to)
+        pose_via = self.csys * Transform3D(pose_via)
+        pose_to = self.csys * Transform3D(pose_to)
         pose = URRobot.movec(self, pose_via.pose_vector, pose_to.pose_vector, acc=acc, vel=vel, wait=wait, threshold=threshold)
         if pose is not None:
             return self.csys.inverse * m3d.Transform(pose)
@@ -104,7 +161,7 @@ class Robot(URRobot):
         t = self.csys * trans
         pose = URRobot.movex(self, command, t.pose_vector, acc=acc, vel=vel, wait=wait, threshold=threshold)
         if pose is not None:
-            return self.csys.inverse * m3d.Transform(pose)
+            return self.csys.inverse * Transform3D(pose)
 
     def add_pose_base(self, trans, acc=0.01, vel=0.01, wait=True, command="movel", threshold=None):
         """
@@ -125,7 +182,7 @@ class Robot(URRobot):
         get current transform from base to to tcp
         """
         pose = URRobot.getl(self, wait, _log)
-        trans = self.csys.inverse * m3d.Transform(pose)
+        trans = self.csys.inverse * Transform3D(pose)
         if _log:
             self.logger.debug("Returning pose to user: %s", trans.pose_vector)
         return trans
@@ -173,7 +230,7 @@ class Robot(URRobot):
         Send a move command to the robot. since UR robotene have several methods this one
         sends whatever is defined in 'command' string
         """
-        t = m3d.Transform(pose)
+        t = Transform3D(pose)
         if relative:
             return self.add_pose_base(t, acc, vel, wait=wait, command=command, threshold=threshold)
         else:
@@ -188,7 +245,7 @@ class Robot(URRobot):
         """
         new_poses = []
         for pose in pose_list:
-            t = self.csys * m3d.Transform(pose)
+            t = self.csys * Transform3D(pose)
             pose = t.pose_vector
             new_poses.append(pose)
         return URRobot.movexs(self, command, new_poses, acc, vel, radius, wait=wait, threshold=threshold)
@@ -200,7 +257,7 @@ class Robot(URRobot):
         return self.movex_tool("movel", pose, acc=acc, vel=vel, wait=wait, threshold=threshold)
 
     def movex_tool(self, command, pose, acc=0.01, vel=0.01, wait=True, threshold=None):
-        t = m3d.Transform(pose)
+        t = Transform3D(pose)
         self.add_pose_tool(t, acc, vel, wait=wait, command=command, threshold=threshold)
 
     def getl(self, wait=False, _log=True):
@@ -222,7 +279,7 @@ class Robot(URRobot):
         based on math3d: Transform.new_from_xyp
         """
         # Set coord. sys. to 0
-        self.csys = m3d.Transform()
+        self.csys = Transform3D()
 
         print("A new coordinate system will be defined from the next three points")
         print("Firs point is X, second Origin, third Y")
@@ -241,7 +298,7 @@ class Robot(URRobot):
         print("Introduced point defining Y: {}".format(pose[:3]))
         py = m3d.Vector(pose[:3])
 
-        new_csys = m3d.Transform.new_from_xyp(px - p0, py - p0, p0)
+        new_csys = Transform3D.new_from_xyp(px - p0, py - p0, p0)
         self.set_csys(new_csys)
 
         return new_csys
@@ -312,7 +369,7 @@ class Robot(URRobot):
 
     @x_t.setter
     def x_t(self, val):
-        t = m3d.Transform()
+        t = Transform3D()
         t.pos.x += val
         self.add_pose_tool(t)
 
@@ -322,7 +379,7 @@ class Robot(URRobot):
 
     @y_t.setter
     def y_t(self, val):
-        t = m3d.Transform()
+        t = Transform3D()
         t.pos.y += val
         self.add_pose_tool(t)
 
@@ -332,7 +389,7 @@ class Robot(URRobot):
 
     @z_t.setter
     def z_t(self, val):
-        t = m3d.Transform()
+        t = Transform3D()
         t.pos.z += val
         self.add_pose_tool(t)
 
@@ -342,7 +399,7 @@ class Robot(URRobot):
 
     @rx_t.setter
     def rx_t(self, val):
-        t = m3d.Transform()
+        t = Transform3D()
         t.orient.rotate_xb(val)
         self.add_pose_tool(t)
 
@@ -352,7 +409,7 @@ class Robot(URRobot):
 
     @ry_t.setter
     def ry_t(self, val):
-        t = m3d.Transform()
+        t = Transform3D()
         t.orient.rotate_yb(val)
         self.add_pose_tool(t)
 
@@ -362,6 +419,6 @@ class Robot(URRobot):
 
     @rz_t.setter
     def rz_t(self, val):
-        t = m3d.Transform()
+        t = Transform3D()
         t.orient.rotate_zb(val)
         self.add_pose_tool(t)
