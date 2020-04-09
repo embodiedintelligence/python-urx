@@ -10,7 +10,7 @@ import struct
 import time
 import threading
 from copy import deepcopy
-from urx.robot import Transform3D
+from urx.transform import Transform
 
 import numpy as np
 
