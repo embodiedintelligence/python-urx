@@ -5,8 +5,6 @@ http://support.universal-robots.com/URRobot/RemoteAccess
 """
 
 import numpy as np
-import attr
-import copy
 
 from urx.urrobot import URRobot
 from urx.transform import Transform
@@ -47,7 +45,7 @@ class Robot(URRobot):
         """
         Set reference coordinate system to use
         """
-        if isinstance(tcp, Transform):
+        if isinstance(transform, Transform):
             self.csys = transform
         else:
             self.csys = Transform(transform)
@@ -57,8 +55,8 @@ class Robot(URRobot):
         set tool orientation using a (3, 3) rotation matrix
         """
         assert orient.shape == (3, 3)
-        trans = self.get_pose()
-        trans[:3, :3] = orient
+        trans = Transform(self.get_pose())
+        trans.pose[:3, :3] = orient
         self.set_pose(trans, acc, vel, wait=wait, threshold=threshold)
 
     def translate_tool(self, vect, acc=0.01, vel=0.01, wait=True, threshold=None):
@@ -81,7 +79,7 @@ class Robot(URRobot):
         set tool to given pos, keeping constant orientation
         """
         assert len(vect) == 3
-        trans = copy.deepcopy(self)
+        trans = Transform(self.get_pose())
         trans.pose[:3, 3] = vect
         return self.set_pose(trans, acc, vel, wait=wait, threshold=threshold)
 
