@@ -7,7 +7,6 @@ import time
 
 import pygame
 
-import math3d as m3d
 from math import pi
 
 import urx

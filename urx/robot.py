@@ -4,14 +4,6 @@ DOC LINK
 http://support.universal-robots.com/URRobot/RemoteAccess
 """
 
-getl
-getj
-movej
-movel
-get_pose()
-
-import math3d as m3d
-import transforms3d as t3d
 import numpy as np
 import quaternion
 import attr
@@ -24,6 +16,7 @@ __copyright__ = "Copyright 2011-2016, Sintef Raufoss Manufacturing"
 __license__ = "LGPLv3"
 
 
+# Taken from covariant/robots/common/kinematics/utils.py
 def get_pose_6d(pose_mat: np.ndarray) -> np.ndarray:
     """ Compute the 6D pose vector(s) (3D position + 3D rotation vector) from the (set of) 4x4 pose matrix(es).
 
@@ -44,6 +37,7 @@ def get_pose_6d(pose_mat: np.ndarray) -> np.ndarray:
     return pose_6d
 
 
+# Taken from covariant/robots/common/kinematics/utils.py
 def get_pose_mat(pose_6d_or_7d: np.ndarray) -> np.ndarray:
     """ Computes 4x4 pose matrices from either 6D pose vectors (interpreted as 3D position followed by 3D rotation
     vector) or 7D pose vectors (interpreted as 3D position followed by 4D quaternion.
@@ -95,53 +89,44 @@ class Transform3D:
 
     @property
     def pose_vector(self) -> np.array:
-        """inverse of transform
-        """
+        """pose as a position and rotation vector"""
+
         return get_pose_6d(self.pose)
 
     @property
     def pos(self) -> np.array:
-        """inverse of transform
-        """
-        T, _, _, _ = t3d.decompose44(self.pose)
+        """position"""
+        T = self.pose[:3, 3]
         return T
 
     @property
     def ori(self) -> np.array:
-        """inverse of transform
-        """
-        _, R, _, _ = t3d.decompose44(self.pose)
+        """orintation as a (3, 3) rotation matrix"""
+
+        R = self.pose[:3, :3]
         return R
 
     @property
     def inverse(self) -> "Transform3D":
-        """inverse of transform
-        """
+        """inverse homogenous transform"""
+
         H = np.eye(4)
-        T, R, _, _ = t3d.decompose44(self.pose)
-        H[:3,:3] = -R.T.dot(T)
-        H[:3,3] = R.T
+        T = self.pos
+        R = self.ori
+        H[:3, :3] = R.T
+        H[:3, 3] = -R.T.dot(T)
         return Transform3D(H)
 
     def dist(self, trans: "Transform3D") -> float:
-        """distance to the other transform
-
-        Parameters
-        ----------
-        trans:
-            TODO: explanation
-
-        Returns
-        -------
-        float
-            TODO: explanation
-        """
-        _, angle = t3d.mat2axangle(self.ori.T.dot(trans.ori))
-        return np.sum((self.pos - trans.pos) ** 2)) + angle ** 2
+        """distance to the other transform"""
+        mat_rotation_difference = self.ori.T.dot(trans.ori)
+        rotation_vector = quaternion.as_rotation_vector(quaternion.from_rotation_matrix(mat_rotation_difference))
+        angle = np.linalg.norm(rotation_vector)
+        return np.sum((self.pos - trans.pos) ** 2) + angle ** 2
 
     def __mul__(self, other):
         if type(other) == Transform3D:
-            return Transform3D(t1.pose.dot(t1.pose))
+            return Transform3D(self.pose.dot(other.pose))
         else:
             raise NotImplementedError
 
@@ -183,8 +168,7 @@ class Robot(URRobot):
 
     def set_orientation(self, orient, acc=0.01, vel=0.01, wait=True, threshold=None):
         """
-        set tool orientation using a orientation matric from math3d
-        or a orientation vector
+        set tool orientation using a (3, 3) rotation matrix
         """
         assert orient.shape == (3, 3)
         trans = self.get_pose()
@@ -296,6 +280,15 @@ class Robot(URRobot):
         """
         return self.speedx("speedj", velocities, acc, min_time)
 
+    def speedl_tool(self, velocities, acc, min_time):
+        """
+        move at given velocities in tool csys until minimum min_time seconds
+        """
+        pose = self.get_pose()
+        v = pose.ori.dot(velocities[:3])
+        w = pose.ori.dot(velocities[3:])
+        self.speedl(np.concatenate((v.array, w.array)), acc, min_time)
+
     def movex(self, command, pose, acc=0.01, vel=0.01, wait=True, relative=False, threshold=None):
         """
         Send a move command to the robot. since UR robotene have several methods this one
@@ -335,7 +328,7 @@ class Robot(URRobot):
         """
         return current transformation from tcp to current csys
         """
-        t = self.get_pose(wait, _log)
+        t = Transform3D(self.get_pose(wait, _log))
         return t.pose_vector
 
     def set_gravity(self, vector):

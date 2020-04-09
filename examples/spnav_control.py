@@ -2,7 +2,7 @@ from __future__ import division
 
 import spnav
 import time
-import math3d as m3d
+import numpy as np
 from math import pi
 
 import urx
@@ -80,8 +80,12 @@ if __name__ == '__main__':
     robot = urx.Robot("192.168.0.90")
     #robot = urx.Robot("localhost")
     robot.set_tcp((0, 0, 0.27, 0, 0, 0))
-    trx = m3d.Transform()
-    trx.orient.rotate_zb(pi/4)
+    trx = np.array([
+        [np.cos(pi / 4), -np.sin(pi / 4), 0, 0],
+        [np.sin(pi / 4), np.cos(pi / 4), 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ])
     robot.set_csys("mycsys", trx)
     service = Service(robot)
     try:
