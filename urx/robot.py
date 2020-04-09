@@ -4,11 +4,18 @@ DOC LINK
 http://support.universal-robots.com/URRobot/RemoteAccess
 """
 
+getl
+getj
+movej
+movel
+get_pose()
 
 import math3d as m3d
 import transforms3d as t3d
 import numpy as np
+import quaternion
 import attr
+import copy
 
 from urx.urrobot import URRobot
 
@@ -17,32 +24,93 @@ __copyright__ = "Copyright 2011-2016, Sintef Raufoss Manufacturing"
 __license__ = "LGPLv3"
 
 
-@attr.s(frozen=True, kw_only=True)
+def get_pose_6d(pose_mat: np.ndarray) -> np.ndarray:
+    """ Compute the 6D pose vector(s) (3D position + 3D rotation vector) from the (set of) 4x4 pose matrix(es).
+
+    Parameters
+    ----------
+    pose_mat : np.ndarray, shape=(..., 4, 4)
+        A (stack of) 4x4 pose matrix(es) for which to compute the 6D pose vector(s).
+
+    Returns
+    -------
+    np.ndarray, shape=(..., 6)
+        The pose vector(s) corresponding to the given pose matrix(es), where the first 3 elements of each pose vector
+        is the 3D position and the last 3 elements of each pose vector is the 3D rotation vector.
+    """
+    pose_6d = np.zeros((*pose_mat.shape[:-2], 6))
+    pose_6d[..., :3] = pose_mat[..., :3, -1]
+    pose_6d[..., 3:] = quaternion.as_rotation_vector(quaternion.from_rotation_matrix(pose_mat[..., :3, :3]))
+    return pose_6d
+
+
+def get_pose_mat(pose_6d_or_7d: np.ndarray) -> np.ndarray:
+    """ Computes 4x4 pose matrices from either 6D pose vectors (interpreted as 3D position followed by 3D rotation
+    vector) or 7D pose vectors (interpreted as 3D position followed by 4D quaternion.
+
+    Parameters
+    ----------
+    pose_6d_or_7d : np.ndarray, shape=(..., Union[6, 7])
+        A (stack of) pose vector(s) for which to compute 4x4 pose matrices.
+
+    Returns
+    -------
+    np.ndarray, shape=(..., 4, 4)
+        The (stack of) pose matrix(es) corresponding to the given pose vector(s).
+
+    Notes
+    -----
+    This method supports vectorization.
+    """
+    if pose_6d_or_7d.ndim >= 2 and pose_6d_or_7d.shape[-2:] == (4, 4):
+        return pose_6d_or_7d
+    pose_6d_or_7d = np.asarray(pose_6d_or_7d)
+    extra_dims = tuple(pose_6d_or_7d.shape[:-1])
+    N = int(np.prod(extra_dims))
+    mat = np.tile(np.eye(4).reshape((1, 4, 4)), (N, 1, 1))
+    pose_6d_or_7d = pose_6d_or_7d.reshape((N, -1))
+    if pose_6d_or_7d.shape[-1] == 6:
+        mat[:, :3, :3] = quaternion.as_rotation_matrix(
+            quaternion.from_rotation_vector(np.ascontiguousarray(pose_6d_or_7d[:, 3:]))
+        )
+        mat[:, :3, -1] = pose_6d_or_7d[:, :3]
+    elif pose_6d_or_7d.shape[-1] == 7:
+        mat[:, :3, :3] = quaternion.as_rotation_matrix(
+            quaternion.as_quat_array(np.ascontiguousarray(pose_6d_or_7d[:, 3:]))
+        )
+        mat[:, :3, -1] = pose_6d_or_7d[:, :3]
+    else:
+        raise NotImplementedError
+    return mat.reshape(extra_dims + (4, 4))
+
+
 class Transform3D:
     """Helper transform wrapper"""
-
-    pose: np.array = attr.ib(default=np.eye(4))
+    def __init__(self, pose_or_pose_vector: np.array = np.eye(4)):
+        """Init a 3D transform"""
+        if pose_or_pose_vector.shape[-1] == 6:
+            self.pose = get_pose_mat(pose_or_pose_vector)
+        elif pose_or_pose_vector.shape == (4, 4):
+            self.pose = pose_or_pose_vector
 
     @property
     def pose_vector(self) -> np.array:
         """inverse of transform
         """
-        T, _, _, _ = t3d.decompose44(self.pose_vector)
-        return T
-
+        return get_pose_6d(self.pose)
 
     @property
     def pos(self) -> np.array:
         """inverse of transform
         """
-        T, _, _, _ = t3d.decompose44(self.pose_vector)
+        T, _, _, _ = t3d.decompose44(self.pose)
         return T
 
     @property
     def ori(self) -> np.array:
         """inverse of transform
         """
-        _, R, _, _ = t3d.decompose44(self.pose_vector)
+        _, R, _, _ = t3d.decompose44(self.pose)
         return R
 
     @property
@@ -50,9 +118,9 @@ class Transform3D:
         """inverse of transform
         """
         H = np.eye(4)
-        T, R, _, _ = t3d.decompose44(self.pose_vector)
-        H[:3,:3] = T
-        H[:3,3] = R
+        T, R, _, _ = t3d.decompose44(self.pose)
+        H[:3,:3] = -R.T.dot(T)
+        H[:3,3] = R.T
         return Transform3D(H)
 
     def dist(self, trans: "Transform3D") -> float:
@@ -68,8 +136,14 @@ class Transform3D:
         float
             TODO: explanation
         """
-        rot_diff = t3d.mat2axangle(self.ori.T.dot(trans.ori))[0]
-        return np.sum((self.pos - trans.pos) ** 2)) + rot_diff ** 2
+        _, angle = t3d.mat2axangle(self.ori.T.dot(trans.ori))
+        return np.sum((self.pos - trans.pos) ** 2)) + angle ** 2
+
+    def __mul__(self, other):
+        if type(other) == Transform3D:
+            return Transform3D(t1.pose.dot(t1.pose))
+        else:
+            raise NotImplementedError
 
 
 class Robot(URRobot):
@@ -102,17 +176,19 @@ class Robot(URRobot):
         """
         Set reference coordinate system to use
         """
-        self.csys = transform
+        if isinstance(tcp, Transform3D):
+            self.csys = transform
+        else:
+            self.csys = Transform3D(transform)
 
     def set_orientation(self, orient, acc=0.01, vel=0.01, wait=True, threshold=None):
         """
         set tool orientation using a orientation matric from math3d
         or a orientation vector
         """
-        if not isinstance(orient, m3d.Orientation):
-            orient = m3d.Orientation(orient)
+        assert orient.shape == (3, 3)
         trans = self.get_pose()
-        trans.orient = orient
+        trans[:3, :3] = orient
         self.set_pose(trans, acc, vel, wait=wait, threshold=threshold)
 
     def translate_tool(self, vect, acc=0.01, vel=0.01, wait=True, threshold=None):
@@ -120,9 +196,8 @@ class Robot(URRobot):
         move tool in tool coordinate, keeping orientation
         """
         t = Transform3D()
-        if not isinstance(vect, m3d.Vector):
-            vect = m3d.Vector(vect)
-        t.pos += vect
+        assert len(vect) == 3
+        t.pose[:3, 3] += vect
         return self.add_pose_tool(t, acc, vel, wait=wait, threshold=threshold)
 
     def back(self, z=0.05, acc=0.01, vel=0.01):
@@ -135,9 +210,9 @@ class Robot(URRobot):
         """
         set tool to given pos, keeping constant orientation
         """
-        if not isinstance(vect, m3d.Vector):
-            vect = m3d.Vector(vect)
-        trans = Transform3D(self.get_orientation(), m3d.Vector(vect))
+        assert len(vect) == 3
+        trans = copy.deepcopy(self)
+        trans.pose[:3, 3] = vect
         return self.set_pose(trans, acc, vel, wait=wait, threshold=threshold)
 
     def movec(self, pose_via, pose_to, acc=0.01, vel=0.01, wait=True, threshold=None):
@@ -149,9 +224,9 @@ class Robot(URRobot):
         pose_to = self.csys * Transform3D(pose_to)
         pose = URRobot.movec(self, pose_via.pose_vector, pose_to.pose_vector, acc=acc, vel=vel, wait=wait, threshold=threshold)
         if pose is not None:
-            return self.csys.inverse * m3d.Transform(pose)
+            return (self.csys.inverse * Transform3D(pose)).pose
 
-    def set_pose(self, trans, acc=0.01, vel=0.01, wait=True, command="movel", threshold=None):
+    def set_pose(self, trans: Transform3D, acc=0.01, vel=0.01, wait=True, command="movel", threshold=None):
         """
         move tcp to point and orientation defined by a transformation
         UR robots have several move commands, by default movel is used but it can be changed
@@ -161,52 +236,57 @@ class Robot(URRobot):
         t = self.csys * trans
         pose = URRobot.movex(self, command, t.pose_vector, acc=acc, vel=vel, wait=wait, threshold=threshold)
         if pose is not None:
-            return self.csys.inverse * Transform3D(pose)
+            return (self.csys.inverse * Transform3D(pose)).pose
 
     def add_pose_base(self, trans, acc=0.01, vel=0.01, wait=True, command="movel", threshold=None):
         """
         Add transform expressed in base coordinate
         """
-        pose = self.get_pose()
+        if not isinstance(trans, Transform3D):
+            trans = Transform3D(trans)
+
+        pose = Transform3D(self.get_pose())
         return self.set_pose(trans * pose, acc, vel, wait=wait, command=command, threshold=threshold)
 
     def add_pose_tool(self, trans, acc=0.01, vel=0.01, wait=True, command="movel", threshold=None):
         """
         Add transform expressed in tool coordinate
         """
-        pose = self.get_pose()
+        if not isinstance(trans, Transform3D):
+            trans = Transform3D(trans)
+        pose = Transform3D(self.get_pose())
         return self.set_pose(pose * trans, acc, vel, wait=wait, command=command, threshold=threshold)
 
     def get_pose(self, wait=False, _log=True):
         """
-        get current transform from base to to tcp
+        get current transform from base to to tcp. Return (4, 4) homogenerous transform
         """
         pose = URRobot.getl(self, wait, _log)
         trans = self.csys.inverse * Transform3D(pose)
         if _log:
             self.logger.debug("Returning pose to user: %s", trans.pose_vector)
-        return trans
+        return trans.pose
 
     def get_orientation(self, wait=False):
         """
         get tool orientation in base coordinate system
         """
         trans = self.get_pose(wait)
-        return trans.orient
+        return trans[:3, :3]
 
     def get_pos(self, wait=False):
         """
         get tool tip pos(x, y, z) in base coordinate system
         """
         trans = self.get_pose(wait)
-        return trans.pos
+        return trans[:3, 3]
 
     def speedl(self, velocities, acc, min_time):
         """
         move at given velocities until minimum min_time seconds
         """
-        v = self.csys.orient * m3d.Vector(velocities[:3])
-        w = self.csys.orient * m3d.Vector(velocities[3:])
+        v = self.csys.ori.dot(velocities[:3])
+        w = self.csys.ori.dot(velocities[3:])
         vels = np.concatenate((v.array, w.array))
         return self.speedx("speedl", vels, acc, min_time)
 
@@ -215,15 +295,6 @@ class Robot(URRobot):
         move at given joint velocities until minimum min_time seconds
         """
         return self.speedx("speedj", velocities, acc, min_time)
-
-    def speedl_tool(self, velocities, acc, min_time):
-        """
-        move at given velocities in tool csys until minimum min_time seconds
-        """
-        pose = self.get_pose()
-        v = pose.orient * m3d.Vector(velocities[:3])
-        w = pose.orient * m3d.Vector(velocities[3:])
-        self.speedl(np.concatenate((v.array, w.array)), acc, min_time)
 
     def movex(self, command, pose, acc=0.01, vel=0.01, wait=True, relative=False, threshold=None):
         """
@@ -265,160 +336,8 @@ class Robot(URRobot):
         return current transformation from tcp to current csys
         """
         t = self.get_pose(wait, _log)
-        return t.pose_vector.tolist()
+        return t.pose_vector
 
     def set_gravity(self, vector):
-        if isinstance(vector, m3d.Vector):
-            vector = vector.list
+        assert len(vector) == 3
         return URRobot.set_gravity(self, vector)
-
-    def new_csys_from_xpy(self):
-        """
-        Restores and returns new coordinate system calculated from three points: X, Origin, Y
-
-        based on math3d: Transform.new_from_xyp
-        """
-        # Set coord. sys. to 0
-        self.csys = Transform3D()
-
-        print("A new coordinate system will be defined from the next three points")
-        print("Firs point is X, second Origin, third Y")
-        print("Set it as a new reference by calling myrobot.set_csys(new_csys)")
-        input("Move to first point and click Enter")
-        # we do not use get_pose so we avoid rounding values
-        pose = URRobot.getl(self)
-        print("Introduced point defining X: {}".format(pose[:3]))
-        px = m3d.Vector(pose[:3])
-        input("Move to second point and click Enter")
-        pose = URRobot.getl(self)
-        print("Introduced point defining Origo: {}".format(pose[:3]))
-        p0 = m3d.Vector(pose[:3])
-        input("Move to third point and click Enter")
-        pose = URRobot.getl(self)
-        print("Introduced point defining Y: {}".format(pose[:3]))
-        py = m3d.Vector(pose[:3])
-
-        new_csys = Transform3D.new_from_xyp(px - p0, py - p0, p0)
-        self.set_csys(new_csys)
-
-        return new_csys
-
-    @property
-    def x(self):
-        return self.get_pos().x
-
-    @x.setter
-    def x(self, val):
-        p = self.get_pos()
-        p.x = val
-        self.set_pos(p)
-
-    @property
-    def y(self):
-        return self.get_pos().y
-
-    @y.setter
-    def y(self, val):
-        p = self.get_pos()
-        p.y = val
-        self.set_pos(p)
-
-    @property
-    def z(self):
-        return self.get_pos().z
-
-    @z.setter
-    def z(self, val):
-        p = self.get_pos()
-        p.z = val
-        self.set_pos(p)
-
-    @property
-    def rx(self):
-        return 0
-
-    @rx.setter
-    def rx(self, val):
-        p = self.get_pose()
-        p.orient.rotate_xb(val)
-        self.set_pose(p)
-
-    @property
-    def ry(self):
-        return 0
-
-    @ry.setter
-    def ry(self, val):
-        p = self.get_pose()
-        p.orient.rotate_yb(val)
-        self.set_pose(p)
-
-    @property
-    def rz(self):
-        return 0
-
-    @rz.setter
-    def rz(self, val):
-        p = self.get_pose()
-        p.orient.rotate_zb(val)
-        self.set_pose(p)
-
-    @property
-    def x_t(self):
-        return 0
-
-    @x_t.setter
-    def x_t(self, val):
-        t = Transform3D()
-        t.pos.x += val
-        self.add_pose_tool(t)
-
-    @property
-    def y_t(self):
-        return 0
-
-    @y_t.setter
-    def y_t(self, val):
-        t = Transform3D()
-        t.pos.y += val
-        self.add_pose_tool(t)
-
-    @property
-    def z_t(self):
-        return 0
-
-    @z_t.setter
-    def z_t(self, val):
-        t = Transform3D()
-        t.pos.z += val
-        self.add_pose_tool(t)
-
-    @property
-    def rx_t(self):
-        return 0
-
-    @rx_t.setter
-    def rx_t(self, val):
-        t = Transform3D()
-        t.orient.rotate_xb(val)
-        self.add_pose_tool(t)
-
-    @property
-    def ry_t(self):
-        return 0
-
-    @ry_t.setter
-    def ry_t(self, val):
-        t = Transform3D()
-        t.orient.rotate_yb(val)
-        self.add_pose_tool(t)
-
-    @property
-    def rz_t(self):
-        return 0
-
-    @rz_t.setter
-    def rz_t(self, val):
-        t = Transform3D()
-        t.orient.rotate_zb(val)
-        self.add_pose_tool(t)
