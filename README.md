@@ -5,7 +5,7 @@ It is meant as an easy to use module for pick and place operations, although it 
 
 urx was primarily developed by [Olivier Roulet-Dubonnet](https://github.com/oroulet) for [Sintef Raufoss Manufacturing](http://www.sintef.no/manufacturing/).
 
-#Example use:
+# Example use:
 
 ```python
 import urx
@@ -71,7 +71,7 @@ o.rotate_yb(pi)
 robot.set_orientation(o)
 ```
 
-#Other interactive methods/properties
+# Other interactive methods/properties
 
 ```python
 
@@ -87,11 +87,11 @@ rob.set_csys(csys)
 ```
 
 
-#Robotiq Gripper
+# Robotiq Gripper
 
 urx can also control a Robotiq gripper attached to the UR robot.  The robotiq class was primarily developed by [Mark Silliman](https://github.com/markwsilliman).
 
-##Example use:
+## Example use:
 
 ```python
 import sys

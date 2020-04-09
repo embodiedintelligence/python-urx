@@ -67,7 +67,7 @@ class Transform:
     """Helper transform wrapper"""
     def __init__(self, pose_or_pose_vector: np.array = np.eye(4)):
         """Init a 3D transform"""
-        if pose_or_pose_vector.shape[-1] == 6:
+        if len(pose_or_pose_vector) == 6:
             self.pose = get_pose_mat(pose_or_pose_vector)
         elif pose_or_pose_vector.shape == (4, 4):
             self.pose = pose_or_pose_vector
