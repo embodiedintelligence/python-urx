@@ -38,6 +38,12 @@ def pose_vector_strategy(
     )
     return np.array(pos_vector + rot_vector)
 
+def test_Transform_empty():
+    t = Transform()
+    assert np.allclose(t.pose, np.eye(4))
+    assert np.allclose(t.pose_vector, np.zeros(6,))
+
+
 @given(pose_vector=pose_vector_strategy())
 def test_Transform_vector(pose_vector: np.array):
     t = Transform(pose_vector)
@@ -46,6 +52,7 @@ def test_Transform_vector(pose_vector: np.array):
     t.ori
     assert np.allclose((t.inverse * t).pose, np.eye(4))
     assert t.dist(t) == 0
+
 
 @given(pose_vector=pose_vector_strategy())
 def test_Transform_pose(pose_vector: np.array):

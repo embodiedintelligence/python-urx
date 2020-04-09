@@ -57,10 +57,10 @@ class URRTMonitor(threading.Thread):
 
     def set_csys(self, csys):
         with self._csys_lock:
-            if not isinstance(csys, Transform3D):
-                self._csys = Transform3D(self._csys)
-            else:
+            if isinstance(csys, Transform):
                 self._csys = csys
+            else:
+                self._csys = Transform(self._csys)
 
     def __recv_bytes(self, nBytes):
         ''' Facility method for receiving exactly "nBytes" bytes from
@@ -172,7 +172,7 @@ class URRTMonitor(threading.Thread):
 
             if self._csys:
                 with self._csys_lock:
-                    tcp = self._csys.inverse * Transform3D(self._tcp)
+                    tcp = self._csys.inverse * Transform(self._tcp)
                 self._tcp = tcp.pose_vector
         if self._buffering:
             with self._buffer_lock:

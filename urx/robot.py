@@ -16,7 +16,6 @@ __copyright__ = "Copyright 2011-2016, Sintef Raufoss Manufacturing"
 __license__ = "LGPLv3"
 
 
-
 class Robot(URRobot):
 
     """
@@ -39,8 +38,9 @@ class Robot(URRobot):
         """
         set robot flange to tool tip transformation
         """
-        if isinstance(tcp, Transform):
-            tcp = tcp.pose_vector
+        if not isinstance(tcp, Transform):
+            tcp = Transform(tcp)
+        tcp = tcp.pose_vector
         URRobot.set_tcp(self, tcp)
 
     def set_csys(self, transform):
