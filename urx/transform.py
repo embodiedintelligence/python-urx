@@ -92,7 +92,7 @@ class Transform:
         return R
 
     @property
-    def inverse(self) -> "Transform3D":
+    def inverse(self) -> "Transform":
         """inverse homogenous transform"""
 
         H = np.eye(4)
@@ -100,9 +100,9 @@ class Transform:
         R = self.ori
         H[:3, :3] = R.T
         H[:3, 3] = -R.T.dot(T)
-        return Transform3D(H)
+        return Transform(H)
 
-    def dist(self, trans: "Transform3D") -> float:
+    def dist(self, trans: "Transform") -> float:
         """distance to the other transform"""
         mat_rotation_difference = self.ori.T.dot(trans.ori)
         rotation_vector = quaternion.as_rotation_vector(quaternion.from_rotation_matrix(mat_rotation_difference))
@@ -110,7 +110,7 @@ class Transform:
         return np.sum((self.pos - trans.pos) ** 2) + angle ** 2
 
     def __mul__(self, other):
-        if type(other) == Transform3D:
-            return Transform3D(self.pose.dot(other.pose))
+        if type(other) == Transform:
+            return Transform(self.pose.dot(other.pose))
         else:
             raise NotImplementedError
