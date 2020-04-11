@@ -1,7 +1,7 @@
 import quaternion
 import numpy as np
 
-# Taken from covariant/robots/common/kinematics/utils.py
+""" Taken from covariant/robots/common/kinematics/utils.py """
 def get_pose_6d(pose_mat: np.ndarray) -> np.ndarray:
     """ Compute the 6D pose vector(s) (3D position + 3D rotation vector) from the (set of) 4x4 pose matrix(es).
 
@@ -22,7 +22,7 @@ def get_pose_6d(pose_mat: np.ndarray) -> np.ndarray:
     return pose_6d
 
 
-# Taken from covariant/robots/common/kinematics/utils.py
+""" Taken from covariant/robots/common/kinematics/utils.py """
 def get_pose_mat(pose_6d_or_7d: np.ndarray) -> np.ndarray:
     """ Computes 4x4 pose matrices from either 6D pose vectors (interpreted as 3D position followed by 3D rotation
     vector) or 7D pose vectors (interpreted as 3D position followed by 4D quaternion.
@@ -64,9 +64,16 @@ def get_pose_mat(pose_6d_or_7d: np.ndarray) -> np.ndarray:
 
 
 class Transform:
-    """Helper transform wrapper"""
+    """Simple wrapper for encapsulating basic transform functionality."""
     def __init__(self, pose_or_pose_vector: np.array = np.eye(4)):
-        """Init a 3D transform"""
+        """Initialize a 3D transform.
+
+        Parameters
+        ----------
+        pose_or_pose_vector: np.array, shape=(4, 4) or shape=(6,)
+            A pose to be wrapped in a Transform object. In the representation of
+            A homogeneous transform or a pose vector (position and rotation vector)
+        """
         if len(pose_or_pose_vector) == 6:
             self.pose = get_pose_mat(pose_or_pose_vector)
         elif pose_or_pose_vector.shape == (4, 4):
@@ -74,26 +81,25 @@ class Transform:
 
     @property
     def pose_vector(self) -> np.array:
-        """pose as a position and rotation vector"""
-
+        """Return the transform in a vector representation (position and rotation vector)."""
         return get_pose_6d(self.pose)
 
     @property
     def pos(self) -> np.array:
-        """position"""
+        """The position component of a transform."""
         T = self.pose[:3, 3]
         return T
 
     @property
     def ori(self) -> np.array:
-        """orintation as a (3, 3) rotation matrix"""
+        """The orientation component of a transform."""
 
         R = self.pose[:3, :3]
         return R
 
     @property
     def inverse(self) -> "Transform":
-        """inverse homogenous transform"""
+        """The inverse of the homogeneous transform."""
 
         H = np.eye(4)
         T = self.pos

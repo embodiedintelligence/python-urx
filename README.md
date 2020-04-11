@@ -49,8 +49,8 @@ robot = Robot("192.168.1.1")
 mytcp = np.eye(4)  # create a matrix for our tool tcp
 mytcp[2,3] = 0.18  # set z position
 mytcp[:3, :3] = np.array([
-        [np.cos(pi / 4), -np.sin(pi / 4), 0, 0],
-        [np.sin(pi / 4), np.cos(pi / 4), 0, 0],
+        [np.cos(pi / 3), -np.sin(pi / 3), 0, 0],
+        [np.sin(pi / 3), np.cos(pi / 3), 0, 0],
         [0, 0, 1, 0],
         [0, 0, 0, 1],
 ])  # set z rotation

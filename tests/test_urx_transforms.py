@@ -15,7 +15,7 @@ def float_strategy(draw, min_value: float = -100, max_value: float = 100) -> st.
 
     Raises
     ------
-    ValueError: If `min_value` is not positive or `max_value` < `min_value`.
+    ValueError: If `max_value` < `min_value`.
     """
     if max_value < min_value:
         raise ValueError("`max_value` should not be less than `min_value`!")
@@ -27,7 +27,10 @@ def float_strategy(draw, min_value: float = -100, max_value: float = 100) -> st.
 def pose_vector_strategy(
     draw, min_value: float = -10, max_value: float = 10
 ) -> st.SearchStrategy[np.array]:
-    """Generates a `Dimension3D` object with coordinates in [min_value, max_value]."""
+    """Generates a pose as represented by a vector of length 6.
+
+    The first 3 values represent the position. The last 3 values are a rotation vector.
+    """
 
     pos_vector = draw(st.lists(float_strategy(min_value, max_value), min_size=3, max_size=3), label="dimension_3d")
     rot_vector = draw(
@@ -38,14 +41,17 @@ def pose_vector_strategy(
     )
     return np.array(pos_vector + rot_vector)
 
-def test_Transform_empty():
+def test_transform_empty():
+    """Tests that instantiating a empty Transform is an identity transform."""
     t = Transform()
     assert np.allclose(t.pose, np.eye(4))
     assert np.allclose(t.pose_vector, np.zeros(6,))
 
 
 @given(pose_vector=pose_vector_strategy())
-def test_Transform_vector(pose_vector: np.array):
+def test_transform_vector(pose_vector: np.array):
+    """Tests that instantiating a Transform as a pose vector works."""
+
     t = Transform(pose_vector)
     assert np.allclose(get_pose_mat(t.pose_vector), get_pose_mat(pose_vector))
     t.pos == pose_vector[:3]
@@ -55,7 +61,8 @@ def test_Transform_vector(pose_vector: np.array):
 
 
 @given(pose_vector=pose_vector_strategy())
-def test_Transform_pose(pose_vector: np.array):
+def test_transform_pose(pose_vector: np.array):
+    """Tests that instantiating a Transform as a matrix works."""
     pose_mat = get_pose_mat(pose_vector)
     t = Transform(pose_mat)
     assert np.allclose(t.pose, pose_mat)
