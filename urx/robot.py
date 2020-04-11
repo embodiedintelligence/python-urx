@@ -34,7 +34,7 @@ class Robot(URRobot):
 
     def set_tcp(self, tcp):
         """
-        set robot flange to tool tip transformation
+        Set robot flange to tool tip transformation.
         """
         if not isinstance(tcp, Transform):
             tcp = Transform(tcp)
@@ -43,7 +43,7 @@ class Robot(URRobot):
 
     def set_csys(self, transform):
         """
-        Set reference coordinate system to use
+        Set reference coordinate system to use.
         """
         if isinstance(transform, Transform):
             self.csys = transform
@@ -52,7 +52,7 @@ class Robot(URRobot):
 
     def set_orientation(self, orient, acc=0.01, vel=0.01, wait=True, threshold=None):
         """
-        set tool orientation using a (3, 3) rotation matrix
+        Set tool orientation using a (3, 3) rotation matrix.
         """
         assert orient.shape == (3, 3)
         trans = Transform(self.get_pose())
@@ -61,7 +61,7 @@ class Robot(URRobot):
 
     def translate_tool(self, vect, acc=0.01, vel=0.01, wait=True, threshold=None):
         """
-        move tool in tool coordinate, keeping orientation
+        Move tool in tool coordinate, keeping orientation
         """
         t = Transform()
         assert len(vect) == 3
@@ -94,12 +94,15 @@ class Robot(URRobot):
         if pose is not None:
             return (self.csys.inverse * Transform(pose)).pose
 
-    def set_pose(self, trans: Transform, acc=0.01, vel=0.01, wait=True, command="movel", threshold=None):
+    def set_pose(self, trans, acc=0.01, vel=0.01, wait=True, command="movel", threshold=None):
         """
         move tcp to point and orientation defined by a transformation
         UR robots have several move commands, by default movel is used but it can be changed
         using the command argument
         """
+        if not isinstance(trans, Transform):
+            trans = Transform(trans)
+
         self.logger.debug("Setting pose to %s", trans.pose_vector)
         t = self.csys * trans
         pose = URRobot.movex(self, command, t.pose_vector, acc=acc, vel=vel, wait=wait, threshold=threshold)
@@ -127,7 +130,7 @@ class Robot(URRobot):
 
     def get_pose(self, wait=False, _log=True):
         """
-        get current transform from base to to tcp. Return (4, 4) homogenerous transform
+        Get current transform from base to to tcp. Return (4, 4) homogenerous transform.
         """
         pose = URRobot.getl(self, wait, _log)
         trans = self.csys.inverse * Transform(pose)
@@ -155,7 +158,7 @@ class Robot(URRobot):
         """
         v = self.csys.ori.dot(velocities[:3])
         w = self.csys.ori.dot(velocities[3:])
-        vels = np.concatenate((v.array, w.array))
+        vels = np.concatenate((v, w))
         return self.speedx("speedl", vels, acc, min_time)
 
     def speedj(self, velocities, acc, min_time):
@@ -171,7 +174,7 @@ class Robot(URRobot):
         pose = self.get_pose()
         v = pose.ori.dot(velocities[:3])
         w = pose.ori.dot(velocities[3:])
-        self.speedl(np.concatenate((v.array, w.array)), acc, min_time)
+        self.speedl(np.concatenate((v, w)), acc, min_time)
 
     def movex(self, command, pose, acc=0.01, vel=0.01, wait=True, relative=False, threshold=None):
         """
@@ -213,7 +216,7 @@ class Robot(URRobot):
         return current transformation from tcp to current csys
         """
         t = Transform(self.get_pose(wait, _log))
-        return t.pose_vector.to_list()
+        return t.pose_vector.tolist()
 
     def set_gravity(self, vector):
         assert len(vector) == 3
