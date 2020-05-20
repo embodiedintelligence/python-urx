@@ -5,7 +5,6 @@ from math import pi
 from IPython import embed
 
 from urx import Robot
-import math3d
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

@@ -10,10 +10,9 @@ import struct
 import time
 import threading
 from copy import deepcopy
+from urx.transform import Transform
 
 import numpy as np
-
-import math3d as m3d
 
 __author__ = "Morten Lind, Olivier Roulet-Dubonnet"
 __copyright__ = "Copyright 2011, NTNU/SINTEF Raufoss Manufacturing AS"
@@ -58,7 +57,10 @@ class URRTMonitor(threading.Thread):
 
     def set_csys(self, csys):
         with self._csys_lock:
-            self._csys = csys
+            if isinstance(csys, Transform):
+                self._csys = csys
+            else:
+                self._csys = Transform(self._csys)
 
     def __recv_bytes(self, nBytes):
         ''' Facility method for receiving exactly "nBytes" bytes from
@@ -170,8 +172,7 @@ class URRTMonitor(threading.Thread):
 
             if self._csys:
                 with self._csys_lock:
-                    # might be a godd idea to remove dependancy on m3d
-                    tcp = self._csys.inverse * m3d.Transform(self._tcp)
+                    tcp = self._csys.inverse * Transform(self._tcp)
                 self._tcp = tcp.pose_vector
         if self._buffering:
             with self._buffer_lock:

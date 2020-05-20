@@ -3,11 +3,9 @@ urx is a python library to control the robots from 'Universal robot'. It is publ
 
 It is meant as an easy to use module for pick and place operations, although it has been used for welding and other sensor based applications that do not require high control frequency.
 
-Both the 'secondary port' interface and the real-time/matlab interface of the UR controller are used. urx can optionally use the [python-math3d](https://github.com/mortlind/pymath3d)(GPL) library to receive and send transformation matrices to the robot urx is known to work with all release robots from Universal Robot. 
-
 urx was primarily developed by [Olivier Roulet-Dubonnet](https://github.com/oroulet) for [Sintef Raufoss Manufacturing](http://www.sintef.no/manufacturing/).
 
-#Example use:
+# Example use:
 
 ```python
 import urx
@@ -42,16 +40,21 @@ except RobotError, ex:
     print("Robot could not execute move (emergency stop for example), do something", ex)
 ```
 
-#Development using Transform objects from math3d library:
+# Development using Transforms:
 
 ```python
 from urx import Robot
-import math3d as m3d
 
 robot = Robot("192.168.1.1")
-mytcp = m3d.Transform()  # create a matrix for our tool tcp
-mytcp.pos.z = 0.18
-mytcp.orient.rotate_zb(pi/3)
+mytcp = np.eye(4)  # create a matrix for our tool tcp
+mytcp[2,3] = 0.18  # set z position
+mytcp[:3, :3] = np.array([
+        [np.cos(pi / 3), -np.sin(pi / 3), 0, 0],
+        [np.sin(pi / 3), np.cos(pi / 3), 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+])  # set z rotation
+
 robot.set_tcp(mytcp)
 time.sleep(0.2)
 
@@ -68,7 +71,7 @@ o.rotate_yb(pi)
 robot.set_orientation(o)
 ```
 
-#Other interactive methods/properties
+# Other interactive methods/properties
 
 ```python
 
@@ -84,11 +87,11 @@ rob.set_csys(csys)
 ```
 
 
-#Robotiq Gripper
+# Robotiq Gripper
 
 urx can also control a Robotiq gripper attached to the UR robot.  The robotiq class was primarily developed by [Mark Silliman](https://github.com/markwsilliman).
 
-##Example use:
+## Example use:
 
 ```python
 import sys
