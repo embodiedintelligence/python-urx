@@ -74,6 +74,7 @@ class Transform:
             A pose to be wrapped in a Transform object. In the representation of
             A homogeneous transform or a pose vector (position and rotation vector)
         """
+        pose_or_pose_vector = np.array(pose_or_pose_vector)
         if len(pose_or_pose_vector) == 6:
             self.pose = get_pose_mat(pose_or_pose_vector)
         elif pose_or_pose_vector.shape == (4, 4):
